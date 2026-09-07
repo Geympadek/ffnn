@@ -218,8 +218,20 @@ impl<Layers: Layer> Params for ParamsStack<Layers> {
     }
 }
 
-// macro_rules!  {
-//     () => {
-        
-//     };
-// }
+#[macro_export]
+macro_rules! create_stack_layers {
+    ([$in:literal, $out:literal $(, $rest:literal)*]) => {
+        $crate::params::stack_params::WorkingLayer<$in, $out, $crate::create_stack_layers!([$out $(, $rest)*])>
+    };
+
+    ([$last:literal]) => {
+        $crate::params::stack_params::OutputLayer<$last>
+    }
+}
+
+#[macro_export]
+macro_rules! params_stack {
+    ([$($dims:literal), + $(,)?]) => {
+        $crate::params::stack_params::ParamsStack<$crate::create_stack_layers!([$($dims),+])>
+    };
+}

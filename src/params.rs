@@ -1,5 +1,5 @@
-mod heap_params;
-mod stack_params;
+pub mod heap_params;
+pub mod stack_params;
 
 pub trait Params {
     type BiasesIter<'a>: Iterator<Item=&'a [f32]> where Self: 'a;
@@ -67,6 +67,14 @@ pub trait Params {
         result
     }
 
+    fn construct_biases_raw(&self) -> Vec<f32> {
+        self.biases_buff().copied().collect()
+    }
+
+    fn construct_weights_raw(&self) -> Vec<f32> {
+        self.weights_buff().copied().collect()
+    }
+
     fn construct_raw(&self) -> Vec<f32> {
         self.iter().copied().collect()
     }
@@ -79,11 +87,14 @@ mod tests {
     use super::*;
     use heap_params::*;
     use stack_params::*;
+    use crate::params_stack;
+
+    type StackParams = params_stack!([2, 2]);
 
     #[test]
     fn check_params_print_output() {
         // let mut params = ParamsHeap::new(vec![2, 2]);
-        let mut params = ParamsStack::<WorkingLayer<2, 2, OutputLayer<2>>>::new();
+        let mut params = StackParams::new();
 
         for (idx, val) in params.iter_mut().enumerate() {
             *val = idx as f32;
