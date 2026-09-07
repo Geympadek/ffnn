@@ -82,11 +82,17 @@ pub trait Params {
     }
 
     fn topology(&self) -> Self::TopologyIter<'_>;
+
+    fn copy_from(&mut self, src: &impl Params) {
+        for (src, dst) in src.iter().zip(self.iter_mut()) {
+            *dst = *src;
+        }
+    }
+
+    fn create_from(src: &impl Params) -> Self;
 }
 
 pub use heap_params::ParamsHeap;
-
-
 
 #[cfg(test)]
 mod tests {

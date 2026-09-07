@@ -238,6 +238,12 @@ impl<Layers: Layer> Params for ParamsStack<Layers> {
     fn topology(&self) -> Self::TopologyIter<'_> {
         self.layers.topology()
     }
+
+    fn create_from(params: &impl Params) -> Self {
+        let mut result = Self::new();
+        result.copy_from(params);
+        result
+    }
 }
 
 #[macro_export]

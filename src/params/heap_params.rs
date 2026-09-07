@@ -111,6 +111,13 @@ impl Params for ParamsHeap {
     fn topology(&self) -> Self::TopologyIter<'_> {
         self.topology.iter()
     }
+
+    fn create_from(src: &impl Params) -> Self {
+        let topology: Vec<usize> = src.topology().copied().collect();
+        let mut result = Self::new(topology);
+        result.copy_from(src);
+        result
+    }
 }
 
 pub struct BiasIter<'buf, 'top> {
