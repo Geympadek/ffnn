@@ -80,13 +80,15 @@ pub trait Params {
     }
 }
 
+pub use heap_params::ParamsHeap;
+
+
+
 #[cfg(test)]
 mod tests {
     use std::vec;
 
     use super::*;
-    use heap_params::*;
-    use stack_params::*;
     use crate::params_stack;
 
     type StackParams = params_stack!([2, 2]);
