@@ -20,6 +20,8 @@ pub trait Params {
     type RawParamIter<'a>: Iterator<Item=&'a f32> where Self: 'a;
     type RawParamIterMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
     
+    type TopologyIter<'a>: Iterator<Item=&'a usize> where Self: 'a;
+
     fn biases_iter(&self) -> Self::BiasesIter<'_>;
     fn biases_iter_mut(&mut self) -> Self::BiasesIterMut<'_>;
 
@@ -78,6 +80,8 @@ pub trait Params {
     fn construct_raw(&self) -> Vec<f32> {
         self.iter().copied().collect()
     }
+
+    fn topology(&self) -> Self::TopologyIter<'_>;
 }
 
 pub use heap_params::ParamsHeap;
@@ -107,5 +111,8 @@ mod tests {
 
         let weights = params.construct_weights();
         assert_eq!(weights, vec![vec![vec![2.0_f32, 3.0_f32], vec![4.0_f32, 5.0_f32]]]);
+
+        let topology: Vec<usize> = params.topology().copied().collect();
+        assert_eq!(topology, vec![2usize, 2usize]);
     }
 }

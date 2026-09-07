@@ -68,6 +68,8 @@ impl Params for ParamsHeap {
     type RawParamIter<'a> = Iter<'a, f32>;
     type RawParamIterMut<'a> = IterMut<'a, f32>;
 
+    type TopologyIter<'a> = Iter<'a, usize>;
+
     fn biases_iter(&self) -> Self::BiasesIter<'_> {
         BiasIter::new(self.biases_buff(), &self.topology)
     }
@@ -104,6 +106,10 @@ impl Params for ParamsHeap {
     }
     fn iter_mut(&mut self) -> Self::RawParamIterMut<'_> {
         self.buffer.iter_mut()
+    }
+
+    fn topology(&self) -> Self::TopologyIter<'_> {
+        self.topology.iter()
     }
 }
 

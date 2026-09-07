@@ -1,5 +1,5 @@
 use crate::params::{Params};
-use std::iter::{Chain, Once, Empty};
+use std::iter::{Chain, Once, Empty, once};
 use std::slice::{Chunks, ChunksMut, Iter, IterMut};
 
 pub trait Layer {
@@ -17,6 +17,8 @@ pub trait Layer {
     type WeightsBuff<'a>: Iterator<Item=&'a f32> where Self: 'a;
     type WeightsBuffMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
 
+    type TopologyIter<'a>: Iterator<Item=&'a usize> where Self: 'a;
+
     fn biases_iter(&self) -> Self::BiasesIter<'_>;
     fn biases_iter_mut(&mut self) -> Self::BiasesIterMut<'_>;
     
@@ -28,6 +30,8 @@ pub trait Layer {
 
     fn weights_buff(&self) -> Self::WeightsBuff<'_>;
     fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_>;
+
+    fn topology(&self) -> Self::TopologyIter<'_>;
 }
 
 pub struct WorkingLayer<
@@ -56,6 +60,8 @@ impl<
 
     type WeightsBuff<'a> = Chain<Iter<'a, f32>, Tail::WeightsBuff<'a>> where Self: 'a;
     type WeightsBuffMut<'a> = Chain<IterMut<'a, f32>, Tail::WeightsBuffMut<'a>> where Self: 'a;
+
+    type TopologyIter<'a> = Chain<Once<&'a usize>, Tail::TopologyIter<'a>> where Self: 'a;
 
     fn new() -> Self {
         let weights = [[0.0f32; INPUT_LEN]; OUTPUT_LEN];
@@ -94,6 +100,10 @@ impl<
     fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_> {
         self.weights.as_flattened_mut().iter_mut().chain(self.next.weights_buff_mut())
     }
+
+    fn topology(&self) -> Self::TopologyIter<'_> {
+        once(&INPUT_LEN).chain(self.next.topology())
+    }
 }
 
 pub struct OutputLayer<const INPUT_LEN: usize> {}
@@ -114,6 +124,8 @@ impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
 
     type WeightsBuff<'a> = Empty<&'a f32>;
     type WeightsBuffMut<'a> = Empty<&'a mut f32>;
+
+    type TopologyIter<'a> = Once<&'a usize>;
 
     fn biases_iter(&self) -> Self::BiasesIter<'_> {
         std::iter::empty()
@@ -142,6 +154,10 @@ impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
     }
     fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_> {
         std::iter::empty()
+    }
+
+    fn topology(&self) -> Self::TopologyIter<'_> {
+        std::iter::once(&INPUT_LEN)
     }
 }
 
@@ -175,6 +191,8 @@ impl<Layers: Layer> Params for ParamsStack<Layers> {
 
     type RawParamIter<'a> = Chain<Self::BiasesBuff<'a>, Self::WeightsBuff<'a>> where Self: 'a;
     type RawParamIterMut<'a> = Chain<Self::BiasesBuffMut<'a>, Self::WeightsBuffMut<'a>> where Self: 'a;
+
+    type TopologyIter<'a> = Layers::TopologyIter<'a> where Self: 'a;
 
     fn biases_iter(&self) -> Self::BiasesIter<'_> {
         self.layers.biases_iter()
@@ -215,6 +233,10 @@ impl<Layers: Layer> Params for ParamsStack<Layers> {
 
             biases_ref.chain(weights_ref)
         }
+    }
+
+    fn topology(&self) -> Self::TopologyIter<'_> {
+        self.layers.topology()
     }
 }
 
