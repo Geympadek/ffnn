@@ -9,41 +9,57 @@ fn linear(val: f32) -> f32 {
 }
 
 pub trait ActivationType {
-    fn activate(val: f32) -> Option<f32>;
+    fn activate(val: f32) -> f32;
+
+    fn to_val() -> ActivationVal;
 }
 
 pub struct ReLU {}
 impl ActivationType for ReLU {
-    fn activate(val: f32) -> Option<f32> {
-        Some(relu(val))
+    fn activate(val: f32) -> f32 {
+        relu(val)
+    }
+
+    fn to_val() -> ActivationVal {
+        ActivationVal::ReLU
     }
 }
 
 pub struct Linear {}
 impl ActivationType for Linear {
-    fn activate(val: f32) -> Option<f32> {
-        Some(linear(val))
+    fn activate(val: f32) -> f32 {
+        linear(val)
+    }
+
+    fn to_val() -> ActivationVal {
+        ActivationVal::Linear
     }
 }
 
 ///To be used when activation type is used dynamically
-pub struct UseVal {}
-impl ActivationType for UseVal {
-    fn activate(_: f32) -> Option<f32> {
-        None
+pub struct Unset {}
+impl ActivationType for Unset {
+    fn activate(_: f32) -> f32 {
+        panic!("`UseVal` doesn't have an implementation for `activate` function. To fix this issue pass activation function to the FFNN constructor.")
+    }
+
+    fn to_val() -> ActivationVal {
+        ActivationVal::Unset
     }
 }
 
 pub enum ActivationVal {
     ReLU,
-    Linear
+    Linear,
+    Unset
 }
 
 impl ActivationVal {
     pub fn activate(&self, val: f32) -> f32 {
         match *self {
             ActivationVal::ReLU => relu(val),
-            ActivationVal::Linear => linear(val)
+            ActivationVal::Linear => linear(val),
+            ActivationVal::Unset => panic!("No Activation function was specified for FFNN.")
         }
     }
 }

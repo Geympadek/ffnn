@@ -2,6 +2,8 @@ use crate::params::{Params};
 use std::iter::{Chain, Once, Empty, once};
 use std::slice::{Chunks, ChunksMut, Iter, IterMut};
 
+use crate::ffnn::activation::ActivationType;
+
 pub trait Layer {
     fn new() -> Self;
 
@@ -32,6 +34,8 @@ pub trait Layer {
     fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_>;
 
     fn topology(&self) -> Self::TopologyIter<'_>;
+
+    fn forward<Activation: ActivationType>(&self, inputs: &[f32], output: &mut [f32]);
 }
 
 pub struct WorkingLayer<
@@ -104,6 +108,23 @@ impl<
     fn topology(&self) -> Self::TopologyIter<'_> {
         once(&INPUT_LEN).chain(self.next.topology())
     }
+
+    fn forward<Activation: ActivationType>(&self, inputs: &[f32], outputs: &mut [f32]) {
+        let mut layer_output = [0.0f32; OUTPUT_LEN];
+
+        //iterating through every neuron in current layer
+        for (i, neuron_weights) in self.weights.iter().enumerate() {
+            let mut sum = self.biases[i];
+
+            for (weight, value) in neuron_weights.iter().zip(inputs.iter()) {
+                sum += weight * value;
+            }
+
+            layer_output[i] = Activation::activate(sum);
+        }
+
+        self.next.forward::<Activation>(&layer_output, outputs);
+    }
 }
 
 pub struct OutputLayer<const INPUT_LEN: usize> {}
@@ -159,10 +180,14 @@ impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
     fn topology(&self) -> Self::TopologyIter<'_> {
         std::iter::once(&INPUT_LEN)
     }
+
+    fn forward<Activation: ActivationType>(&self, inputs: &[f32], output: &mut [f32]) {
+        output.copy_from_slice(inputs);
+    }
 }
 
 pub struct ParamsStack<Layers> {
-    layers: Layers
+    pub layers: Layers
 }
 
 impl<Layers: Layer> ParamsStack<Layers> {
