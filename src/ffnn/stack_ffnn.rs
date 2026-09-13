@@ -67,3 +67,55 @@ impl<L: Layer + Default, A: activation::ActivationType> FFNN<A> for FFNNStack<L,
         &mut self.params
     }
 }
+
+#[macro_export]
+macro_rules! stack_ffnn {
+    ([$($dims:literal), +$(,)?], $activation:ty) => {
+        crate::ffnn::stack_ffnn::FFNNStack<crate::create_stack_layers!([$($dims),+]), $activation>
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ffnn::FFNN, params::{Params}, params_stack};
+    
+    type StackFFNN = stack_ffnn!([2, 2, 1], crate::ffnn::activation::ReLU);
+    #[test]
+    fn check_forward() {
+        let mut foo = StackFFNN::default();
+
+        for (weight, val) in foo.params.weights_buff_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
+            *weight = val as f32;
+        }
+
+        for (bias, val) in foo.params.biases_buff_mut().zip([-1, 0, 0].iter().copied()) {
+            *bias = val as f32;
+        }
+
+        let output = foo.forward_alloc(&[0_f32, 0_f32]);
+        assert_eq!(output, vec![0_f32]);
+
+        let output = foo.forward_alloc(&[0_f32, 1_f32]);
+        assert_eq!(output, vec![0_f32]);
+
+        let output = foo.forward_alloc(&[1_f32, 0_f32]);
+        assert_eq!(output, vec![0_f32]);
+
+        let output = foo.forward_alloc(&[1_f32, 1_f32]);
+        assert_eq!(output, vec![1_f32]);
+    }
+
+    #[test]
+    fn copy_test() {
+        type Params = params_stack!([2, 3, 2]);
+        let a: Params = Default::default();
+        let mut b = a.clone();
+        for val in b.iter_mut() {
+            *val = 0.5f32;
+        }
+        let raw = a.construct_raw();
+        assert_eq!(raw.iter().sum::<f32>(), 0_f32);
+        let raw = b.construct_raw();
+        assert_eq!(raw, vec![0.5f32; raw.len()]);
+    }
+}
