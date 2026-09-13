@@ -38,6 +38,7 @@ pub trait Layer {
     fn forward<Activation: ActivationType>(&self, inputs: &[f32], output: &mut [f32]);
 }
 
+#[derive(Clone, Copy)]
 pub struct WorkingLayer<
     const INPUT_LEN: usize,
     const OUTPUT_LEN: usize,
@@ -127,6 +128,17 @@ impl<
     }
 }
 
+impl<
+    const INPUT_LEN: usize,
+    const OUTPUT_LEN: usize,
+    Tail: Layer
+> Default for WorkingLayer<INPUT_LEN, OUTPUT_LEN, Tail> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Copy, Default)]
 pub struct OutputLayer<const INPUT_LEN: usize> {}
 
 impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
@@ -186,6 +198,7 @@ impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
     }
 }
 
+#[derive(Clone, Copy, Default)]
 pub struct ParamsStack<Layers> {
     pub layers: Layers
 }

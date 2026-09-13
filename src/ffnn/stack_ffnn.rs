@@ -3,20 +3,32 @@ use params::stack_params::{self, Layer, ParamsStack};
 use crate::ffnn::activation;
 use std::marker::PhantomData;
 
-
-pub struct FFNNStack<Layers: Layer, Activation: activation::ActivationType = activation::Unset> {
+#[derive(Clone, Copy)]
+pub struct FFNNStack<Layers: Layer + Default, Activation: activation::ActivationType = activation::Unset> {
     params: ParamsStack<Layers>,
     activation: activation::ActivationVal,
     phantom: PhantomData<Activation>
 }
 
-impl<Layers: Layer, Activation: activation::ActivationType> FFNNStack<Layers, Activation> {
-    pub fn new() -> Self {
+impl<Layers: Layer + Default, Activation: activation::ActivationType> FFNNStack<Layers, Activation> {
+    pub fn new(params: &impl Params, activation: activation::ActivationVal) -> Self {
         Self {
-            params: ParamsStack::new(),
-            activation: activation::ActivationVal::Unset,
+            params: ParamsStack::create_from(params),
+            activation: activation,
             phantom: PhantomData
         }
+    }
+
+    pub fn with_activation(activation: activation::ActivationVal) -> Self {
+        let mut result = Self::default();
+        result.activation = activation;
+        result
+    }
+
+    pub fn from_params(params: &impl Params) -> Self {
+        let mut result= Self::default();
+        result.params = stack_params::ParamsStack::create_from(params);
+        result
     }
 
     pub fn forward(&self, inputs: &[f32], outputs: &mut [f32]) {
@@ -29,7 +41,17 @@ impl<Layers: Layer, Activation: activation::ActivationType> FFNNStack<Layers, Ac
     }
 }
 
-impl<L: Layer, A: activation::ActivationType> FFNN<A> for FFNNStack<L, A> {
+impl<L: Layer + Default, A: activation::ActivationType> Default for FFNNStack<L, A> {
+    fn default() -> Self {
+        Self {
+            params: Default::default(),
+            activation: Default::default(),
+            phantom: Default::default()
+        }
+    }
+}
+
+impl<L: Layer + Default, A: activation::ActivationType> FFNN<A> for FFNNStack<L, A> {
     fn forward_alloc(&self, input: &[f32]) -> Vec<f32> {
         let last_layer = self.params.topology().last().expect("Size of the FFNN is 0 layers.");
         let mut outputs = vec![0_f32;*last_layer];

@@ -48,10 +48,12 @@ impl ActivationType for Unset {
     }
 }
 
+#[derive(Clone, Copy, Default)]
 pub enum ActivationVal {
+    #[default]
+    Unset,
     ReLU,
     Linear,
-    Unset
 }
 
 impl ActivationVal {
