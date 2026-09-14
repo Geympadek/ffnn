@@ -1,5 +1,4 @@
 use crate::{ffnn::{FFNN, activation::{self, ActivationVal}}, params::{Params, ParamsHeap}};
-use std::{marker::PhantomData};
 
 /// Heap implementation that stores all the parameters in a contigous data structure
 /// 
@@ -12,19 +11,17 @@ use std::{marker::PhantomData};
 /// println!("{:?}", output);
 /// ```
 #[derive(Clone)]
-pub struct FFNNHeap<Activation: activation::ActivationType = activation::Unset> {
+pub struct FFNNHeap {
     ///Parameters of the neural network stored on the heap
     params: ParamsHeap,
     ///Activation function
     activation: ActivationVal,
-    phantom: PhantomData<Activation>
 }
 
-impl<A: activation::ActivationType> FFNNHeap<A> {
+impl FFNNHeap {
     ///Takes ownership of `params` and sets an activation function
     pub fn new(params: ParamsHeap, activation: ActivationVal) -> Self {
         Self {
-            phantom: PhantomData,
             params,
             activation
         }
@@ -35,11 +32,11 @@ impl<A: activation::ActivationType> FFNNHeap<A> {
     /// * `output` - output slice, expected to be the same size as the last layer of FFNN
     /// * `buffer` - buffer slice used for temporary storage of layer output data
     /// # Panics
-    /// Function panics if neither `activation` nor `A` set to anything.
+    /// Function panics if neither `activation` set to anything.
     /// Or if the lens of slices are smaller than expected.
     pub fn forward_with_buff(&self, input: &[f32], output: &mut [f32], buffer: &mut [f32]) {
         match self.activation {
-            ActivationVal::Unset => self.forward_with_act::<A>(input, output, buffer),
+            ActivationVal::Unset => panic!("No activation function was set"),
             ActivationVal::Linear => self.forward_with_act::<activation::Linear>(input, output, buffer),
             ActivationVal::ReLU => self.forward_with_act::<activation::ReLU>(input, output, buffer),
         }
@@ -68,7 +65,7 @@ impl<A: activation::ActivationType> FFNNHeap<A> {
     }
 }
 
-impl<A: activation::ActivationType> FFNN<A> for FFNNHeap<A> {
+impl FFNN for FFNNHeap {
     fn params(&self) -> &impl Params {
         &self.params
     }
@@ -91,12 +88,12 @@ impl<A: activation::ActivationType> FFNN<A> for FFNNHeap<A> {
 }
 
 #[derive(Clone)]
-pub struct HeapBuilder<A: activation::ActivationType=activation::Unset> {
-    ffnn: Option<FFNNHeap<A>>,
+pub struct HeapBuilder {
+    ffnn: Option<FFNNHeap>,
     activation: ActivationVal
 }
 
-impl<A: activation::ActivationType> Default for HeapBuilder<A>  {
+impl Default for HeapBuilder  {
     fn default() -> Self {
         Self {
             ffnn: None,
@@ -105,7 +102,7 @@ impl<A: activation::ActivationType> Default for HeapBuilder<A>  {
     }
 }
 
-impl<A: activation::ActivationType> HeapBuilder<A> {
+impl HeapBuilder {
     pub fn new() -> Self {
         Default::default()
     }
@@ -113,7 +110,7 @@ impl<A: activation::ActivationType> HeapBuilder<A> {
     pub fn params_owned(mut self, params: ParamsHeap) -> Self {
         Self {
             ffnn: Some(match &mut self.ffnn {
-                None => FFNNHeap::<A>::new(params, ActivationVal::Unset),
+                None => FFNNHeap::new(params, ActivationVal::Unset),
                 Some(val) => FFNNHeap::new(params, val.activation),
             }),
             activation: ActivationVal::Unset
@@ -159,7 +156,7 @@ impl<A: activation::ActivationType> HeapBuilder<A> {
         }
     }
 
-    pub fn build(self) -> Option<FFNNHeap<A>> {
+    pub fn build(self) -> Option<FFNNHeap> {
         self.ffnn
     }
 }
@@ -174,7 +171,7 @@ mod tests {
 
     #[test]
     fn check_forward() {
-        let mut foo = HeapBuilder::<activation::ReLU>::new()
+        let mut foo = HeapBuilder::new()
             .topology(&[2, 2, 1])
             .build().expect("Unable to build ffnn");
 

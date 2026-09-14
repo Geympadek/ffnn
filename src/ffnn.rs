@@ -7,8 +7,7 @@ pub mod stack_ffnn;
 pub use heap_ffnn::{FFNNHeap};
 
 ///A common trait for FFNN implementations.
-/// * `Act` - is a template parameter used for embedding activation function into the type
-pub trait FFNN<Act: activation::ActivationType> {
+pub trait FFNN {
     ///Feed forwards inputs through neural network, returning outputs in a new vector
     /// ## Parameters
     /// * `input` - Input slice, expected to be the same length as input layer

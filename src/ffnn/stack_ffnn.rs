@@ -1,7 +1,6 @@
 use crate::{ffnn::{FFNN}, params::{self, Params}};
 use params::stack_params::{self, Layer, ParamsStack};
 use crate::ffnn::activation;
-use std::marker::PhantomData;
 
 ///Stack implementation of Feed forwarding neural network. 
 /// Doesn't allocate any heap memory unless prompted. 
@@ -9,19 +8,17 @@ use std::marker::PhantomData;
 /// It is recommended to be used with macro `stack_ffnn!()`. 
 /// Don't use this type directly, unless you know what you are doing.
 #[derive(Clone, Copy)]
-pub struct FFNNStack<Layers: Layer + Default, Activation: activation::ActivationType = activation::Unset> {
+pub struct FFNNStack<Layers: Layer + Default> {
     params: ParamsStack<Layers>,
     activation: activation::ActivationVal,
-    phantom: PhantomData<Activation>
 }
 
-impl<Layers: Layer + Default, Activation: activation::ActivationType> FFNNStack<Layers, Activation> {
+impl<Layers: Layer + Default> FFNNStack<Layers> {
     ///Creates a new instance of FFNN, while copying parameters from given refenence and setting activation function.
     pub fn new(params: &impl Params, activation: activation::ActivationVal) -> Self {
         Self {
             params: ParamsStack::create_from(params),
             activation: activation,
-            phantom: PhantomData
         }
     }
 
@@ -47,22 +44,21 @@ impl<Layers: Layer + Default, Activation: activation::ActivationType> FFNNStack<
         match self.activation {
             activation::ActivationVal::ReLU => layers.forward::<activation::ReLU>(inputs, outputs),
             activation::ActivationVal::Linear => layers.forward::<activation::Linear>(inputs, outputs),
-            activation::ActivationVal::Unset => layers.forward::<Activation>(inputs, outputs),
+            activation::ActivationVal::Unset => panic!("No activation function was set"),
         }
     }
 }
 
-impl<L: Layer + Default, A: activation::ActivationType> Default for FFNNStack<L, A> {
+impl<L: Layer + Default> Default for FFNNStack<L> {
     fn default() -> Self {
         Self {
             params: Default::default(),
             activation: Default::default(),
-            phantom: Default::default()
         }
     }
 }
 
-impl<L: Layer + Default, A: activation::ActivationType> FFNN<A> for FFNNStack<L, A> {
+impl<L: Layer + Default> FFNN for FFNNStack<L> {
     fn forward_alloc(&self, input: &[f32]) -> Vec<f32> {
         let last_layer = self.params.topology().last().expect("Size of the FFNN is 0 layers.");
         let mut outputs = vec![0_f32;*last_layer];
@@ -85,8 +81,8 @@ impl<L: Layer + Default, A: activation::ActivationType> FFNN<A> for FFNNStack<L,
 /// ```
 #[macro_export]
 macro_rules! stack_ffnn {
-    ([$($dims:literal), +$(,)?], $activation:ty) => {
-        crate::ffnn::stack_ffnn::FFNNStack<crate::create_stack_layers!([$($dims),+]), $activation>
+    ([$($dims:literal), +$(,)?]) => {
+        crate::ffnn::stack_ffnn::FFNNStack<crate::create_stack_layers!([$($dims),+])>
     };
 }
 
@@ -94,7 +90,7 @@ macro_rules! stack_ffnn {
 mod tests {
     use crate::{ffnn::FFNN, params::{Params}, params_stack};
     
-    type StackFFNN = stack_ffnn!([2, 2, 1], crate::ffnn::activation::ReLU);
+    type StackFFNN = stack_ffnn!([2, 2, 1]);
     #[test]
     fn check_forward() {
         let mut foo = StackFFNN::default();
