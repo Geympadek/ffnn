@@ -3,6 +3,7 @@ use crate::params::Params;
 use std::slice::{Iter, IterMut};
 use std::slice::{Chunks, ChunksMut};
 
+#[derive(Clone)]
 pub struct ParamsHeap {
     topology: Vec<usize>,
     buffer: Vec<f32>,
