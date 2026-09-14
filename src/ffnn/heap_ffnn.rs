@@ -42,14 +42,14 @@ impl FFNNHeap {
         }
     }
     fn forward_with_act<Act: activation::ActivationType>(&self, input: &[f32], output: &mut [f32], buffer: &mut [f32]) {
-        let buffer_len = *self.params.topology().max().expect("Number of layers is zero");
+        let buffer_len = *self.params.layer_sizes().max().expect("Number of layers is zero");
         assert!(buffer_len * 2<= buffer.len(), "Buffer size is too small");
 
         let (in_buff, out_buff) = buffer.split_at_mut(buffer_len/2 + 1);
 
         in_buff.copy_from_slice(input);
 
-        for (bias_layer, weight_layer) in self.params.biases_iter().zip(self.params.weights_iter()) {
+        for (bias_layer, weight_layer) in self.params.bias_layers().zip(self.params.weight_layers()) {
             for ((&bias, weights), neuron_output) in bias_layer.iter().zip(weight_layer).zip(out_buff.iter_mut()) {
                 let mut raw = bias;
 
@@ -74,8 +74,8 @@ impl FFNN for FFNNHeap {
     }
     
     fn forward_alloc(&self, input: &[f32]) -> Vec<f32> {
-        let buff_len = *self.params.topology().max().expect("The ffnn doesn't have any layers") * 2;
-        let output_len = *self.params.topology().last().expect("The ffnn doesn't have any layers");
+        let buff_len = *self.params.layer_sizes().max().expect("The ffnn doesn't have any layers") * 2;
+        let output_len = *self.params.layer_sizes().last().expect("The ffnn doesn't have any layers");
         let mut buffer = vec![0_f32;buff_len];
         unsafe {
             let output = std::slice::from_raw_parts_mut(buffer.as_mut_ptr(), output_len);
@@ -118,7 +118,7 @@ impl HeapBuilder {
     }
 
     pub fn params(self, params: &impl Params) -> Self {
-        let params = ParamsHeap::create_from(params);
+        let params = ParamsHeap::from_params(params);
         Self {
             ffnn: Some(FFNNHeap::new(params, self.get_activation())),
             activation: ActivationVal::Unset
@@ -175,11 +175,11 @@ mod tests {
             .topology(&[2, 2, 1])
             .build().expect("Unable to build ffnn");
 
-        for (weight, val) in foo.params_mut().weights_buff_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
+        for (weight, val) in foo.params_mut().weights_flat_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
             *weight = val as f32;
         }
 
-        for (bias, val) in foo.params_mut().biases_buff_mut().zip([-1, 0, 0].iter().copied()) {
+        for (bias, val) in foo.params_mut().biases_flat_mut().zip([-1, 0, 0].iter().copied()) {
             *bias = val as f32;
         }
 

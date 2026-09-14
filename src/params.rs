@@ -1,95 +1,149 @@
 pub mod heap_params;
 pub mod stack_params;
 
+/// High-level access to a feed-forward network's weights and biases.
+///
+/// Implementors decide how parameters are stored. This trait exposes:
+/// - structure-preserving views: [`Params::bias_layers`], [`Params::weight_layers`]
+/// - flat views: [`Params::biases_flat`], [`Params::weights_flat`], [`Params::params`]
+/// - allocation helpers: `collect_*`
+///
+/// Layout convention:
+/// - `bias_layers`: one item per non-input layer; each item is `&[f32]`.
+/// - `weight_layers`: one item per non-input layer; each layer item is an
+///   iterator over neurons; each neuron item is `&[f32]` of weights from the
+///   previous layer.
+/// - `layer_sizes`: sizes of all layers. For input=5, hidden=6, output=7,
+///   this yields `[5, 6, 7]`.
 pub trait Params {
-    type BiasesIter<'a>: Iterator<Item=&'a [f32]> where Self: 'a;
-    type BiasesIterMut<'a>: Iterator<Item=&'a mut [f32]> where Self: 'a;
+    /// Iterator over bias layers. Each item is one layer's biases.
+    type BiasLayers<'a>: Iterator<Item=&'a [f32]> where Self: 'a;
+    /// Mutable iterator over bias layers. Each item is one layer's biases.
+    type BiasLayersMut<'a>: Iterator<Item=&'a mut [f32]> where Self: 'a;
 
-    type WeightsRowIter<'a>: Iterator<Item = &'a [f32]> where Self: 'a;
-    type WeightsIter<'a>: Iterator<Item = Self::WeightsRowIter<'a>> where Self: 'a;
-
-    type WeightsRowIterMut<'a>: Iterator<Item = &'a mut [f32]> where Self: 'a;
-    type WeightsIterMut<'a>: Iterator<Item = Self::WeightsRowIterMut<'a>> where Self: 'a;
-
-    type BiasesBuff<'a>: Iterator<Item=&'a f32> where Self: 'a;
-    type BiasesBuffMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
-
-    type WeightsBuff<'a>: Iterator<Item=&'a f32> where Self: 'a;
-    type WeightsBuffMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
-
-    type RawParamIter<'a>: Iterator<Item=&'a f32> where Self: 'a;
-    type RawParamIterMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
+    /// Iterator over neurons in one weight layer.
+    type WeightNeurons<'a>: Iterator<Item = &'a [f32]> where Self: 'a;
+    /// Mutable iterator over neurons in one weight layer.
+    type WeightNeuronsMut<'a>: Iterator<Item = &'a mut [f32]> where Self: 'a;
     
-    type TopologyIter<'a>: Iterator<Item=&'a usize> where Self: 'a;
+    /// Iterator over weight layers.
+    ///
+    /// This is a 3D-style view: layer -> neuron -> weight slice.
+    type WeightLayers<'a>: Iterator<Item = Self::WeightNeurons<'a>> where Self: 'a;
+    /// Mutable iterator over weight layers.
+    ///
+    /// This is a 3D-style view: layer -> neuron -> mutable weight slice.
+    type WeightLayersMut<'a>: Iterator<Item = Self::WeightNeuronsMut<'a>> where Self: 'a;
 
-    fn biases_iter(&self) -> Self::BiasesIter<'_>;
-    fn biases_iter_mut(&mut self) -> Self::BiasesIterMut<'_>;
+    /// Flat iterator over all biases, ignoring layer structure.
+    type BiasesFlat<'a>: Iterator<Item=&'a f32> where Self: 'a;
+    /// Flat mutable iterator over all biases, ignoring layer structure.
+    type BiasesFlatMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
 
-    fn weights_iter(&self) -> Self::WeightsIter<'_>;
-    fn weights_iter_mut(&mut self) -> Self::WeightsIterMut<'_>;
+    /// Flat iterator over all weights, ignoring layer/neuron structure.
+    type WeightsFlat<'a>: Iterator<Item=&'a f32> where Self: 'a;
+    /// Flat mutable iterator over all weights, ignoring layer/neuron structure.
+    type WeightsFlatMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
 
-    fn biases_buff(&self) -> Self::BiasesBuff<'_>;
-    fn biases_buff_mut(&mut self) -> Self::BiasesBuffMut<'_>;
+    /// Flat iterator over every parameter: biases and weights
+    type ParamsIter<'a>: Iterator<Item=&'a f32> where Self: 'a;
+    /// Flat mutable iterator over every parameter: biases and weights
+    type ParamsIterMut<'a>: Iterator<Item=&'a mut f32> where Self: 'a;
+    
+    /// Iterator over layer sizes (including input layer)
+    type LayerSizes<'a>: Iterator<Item=&'a usize> where Self: 'a;
+    
+    /// Returns an iterator over bias layers.
+    ///
+    /// Each `next()` yields one non-input layer's biases as a slice.
+    fn bias_layers(&self) -> Self::BiasLayers<'_>;
 
-    fn weights_buff(&self) -> Self::WeightsBuff<'_>;
-    fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_>;
+    /// Returns a mutable iterator over bias layers.
+    ///
+    /// Each `next()` yields one non-input layer's biases as a mutable slice.
+    fn bias_layers_mut(&mut self) -> Self::BiasLayersMut<'_>;
 
-    fn iter(&self) -> Self::RawParamIter<'_>;
-    fn iter_mut(&mut self) -> Self::RawParamIterMut<'_>;
+    /// Returns an iterator over weight layers.
+    ///
+    /// This is a 3D-style view: layer -> neuron -> weight slice.
+    fn weight_layers(&self) -> Self::WeightLayers<'_>;
+    /// Returns a mutable iterator over weight layers.
+    ///
+    /// This is a 3D-style view: layer -> neuron -> mutable weight slice.
+    fn weight_layers_mut(&mut self) -> Self::WeightLayersMut<'_>;
 
-    ///Constructs a new vector of vectors, copies all biases into it.
-    fn construct_biases(&self) -> Vec<Vec<f32>> {
-        let mut result = Vec::new();
+    /// Returns a flat iterator over all biases.
+    fn biases_flat(&self) -> Self::BiasesFlat<'_>;
+    /// Returns a mutable flat iterator over all biases.
+    fn biases_flat_mut(&mut self) -> Self::BiasesFlatMut<'_>;
 
-        for layer in self.biases_iter() {
-            let mut bias_layer = Vec::new();
-            for bias in layer {
-                bias_layer.push(*bias);
-            }
-            result.push(bias_layer);
-        }
-        result
+    /// Returns a flat iterator over all weights.
+    fn weights_flat(&self) -> Self::WeightsFlat<'_>;
+    /// Returns a flat mutable iterator over all weights.
+    fn weights_flat_mut(&mut self) -> Self::WeightsFlatMut<'_>;
+
+    /// Returns a flat iterator over all parameters.
+    fn params(&self) -> Self::ParamsIter<'_>;
+    /// Returns a flat mutable iterator over all parameters.
+    fn params_mut(&mut self) -> Self::ParamsIterMut<'_>;
+
+    /// Returns an iterator over layer sizes (including input layer).
+    fn layer_sizes(&self) -> Self::LayerSizes<'_>;
+
+    /// Copies all biases into a nested `Vec`.
+    fn collect_biases(&self) -> Vec<Vec<f32>> {
+        self.bias_layers()
+            .map(|layer| layer.to_vec())
+            .collect()
     }
 
-    ///Constructs a new 3D vector, copies all weights into it, while preserving the layout.
-    fn construct_weights(&self) -> Vec<Vec<Vec<f32>>> {
-        let mut result = Vec::new();
-
-        for layer in self.weights_iter() {
-            let mut weight_layer = Vec::new();
-            for neuron in layer {
-                let mut weights_neuron = Vec::new();
-                for weight in neuron {
-                    weights_neuron.push(*weight);
-                }
-                weight_layer.push(weights_neuron);
-            }
-            result.push(weight_layer);
-        }
-        result
+    /// Copies all weights into a nested `Vec`, preserving the layer/neuron layout.
+    fn collect_weights(&self) -> Vec<Vec<Vec<f32>>> {
+        self.weight_layers()
+            .map(|layer| {
+                layer
+                    .map(|neuron| neuron.to_vec())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
-    fn construct_biases_raw(&self) -> Vec<f32> {
-        self.biases_buff().copied().collect()
+    /// Copies all biases into a flat `Vec`.
+    fn collect_biases_flat(&self) -> Vec<f32> {
+        self.biases_flat().copied().collect()
+    }
+    /// Copies all weights into a flat `Vec`.
+    fn collect_weights_flat(&self) -> Vec<f32> {
+        self.weights_flat().copied().collect()
     }
 
-    fn construct_weights_raw(&self) -> Vec<f32> {
-        self.weights_buff().copied().collect()
+    /// Copies every parameter into a flat `Vec`.
+    fn collect_params_flat(&self) -> Vec<f32> {
+        self.params().copied().collect()
     }
 
-    fn construct_raw(&self) -> Vec<f32> {
-        self.iter().copied().collect()
-    }
-
-    fn topology(&self) -> Self::TopologyIter<'_>;
-
+    /// Copies all parameters from `src` into `self`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of parameters differs.
     fn copy_from(&mut self, src: &impl Params) {
-        for (src, dst) in src.iter().zip(self.iter_mut()) {
-            *dst = *src;
+        let mut src_iter = src.params();
+
+        for dst in self.params_mut() {
+            *dst = *src_iter
+                .next()
+                .expect("source has fewer parameters than destination");
         }
+
+        assert!(
+            src_iter.next().is_none(),
+            "source has more parameters than destination"
+        );
     }
 
-    fn create_from(src: &impl Params) -> Self;
+    /// Creates a new `Self` and copies all parameters from `src`.
+    fn from_params(src: &impl Params) -> Self;
 }
 
 pub use heap_params::ParamsHeap;
@@ -108,17 +162,17 @@ mod tests {
         // let mut params = ParamsHeap::new(vec![2, 2]);
         let mut params = StackParams::new();
 
-        for (idx, val) in params.iter_mut().enumerate() {
+        for (idx, val) in params.params_mut().enumerate() {
             *val = idx as f32;
         }
 
-        let biases = params.construct_biases();
+        let biases = params.collect_biases();
         assert_eq!(biases, vec![vec![0.0_f32, 1.0_f32]]);
 
-        let weights = params.construct_weights();
+        let weights = params.collect_weights();
         assert_eq!(weights, vec![vec![vec![2.0_f32, 3.0_f32], vec![4.0_f32, 5.0_f32]]]);
 
-        let topology: Vec<usize> = params.topology().copied().collect();
+        let topology: Vec<usize> = params.layer_sizes().copied().collect();
         assert_eq!(topology, vec![2usize, 2usize]);
     }
 }

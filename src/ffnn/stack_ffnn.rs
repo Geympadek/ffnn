@@ -17,7 +17,7 @@ impl<Layers: Layer + Default> FFNNStack<Layers> {
     ///Creates a new instance of FFNN, while copying parameters from given refenence and setting activation function.
     pub fn new(params: &impl Params, activation: activation::ActivationVal) -> Self {
         Self {
-            params: ParamsStack::create_from(params),
+            params: ParamsStack::from_params(params),
             activation: activation,
         }
     }
@@ -46,7 +46,7 @@ impl<L: Layer + Default> Default for FFNNStack<L> {
 
 impl<L: Layer + Default> FFNN for FFNNStack<L> {
     fn forward_alloc(&self, input: &[f32]) -> Vec<f32> {
-        let last_layer = self.params.topology().last().expect("Size of the FFNN is 0 layers.");
+        let last_layer = self.params.layer_sizes().last().expect("Size of the FFNN is 0 layers.");
         let mut outputs = vec![0_f32;*last_layer];
         
         self.forward(input, outputs.as_mut_slice());
@@ -81,11 +81,11 @@ mod tests {
     fn check_forward() {
         let mut foo = StackFFNN::default();
 
-        for (weight, val) in foo.params.weights_buff_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
+        for (weight, val) in foo.params.weights_flat_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
             *weight = val as f32;
         }
 
-        for (bias, val) in foo.params.biases_buff_mut().zip([-1, 0, 0].iter().copied()) {
+        for (bias, val) in foo.params.biases_flat_mut().zip([-1, 0, 0].iter().copied()) {
             *bias = val as f32;
         }
 
@@ -107,12 +107,12 @@ mod tests {
         type Params = params_stack!([2, 3, 2]);
         let a: Params = Default::default();
         let mut b = a.clone();
-        for val in b.iter_mut() {
+        for val in b.params_mut() {
             *val = 0.5f32;
         }
-        let raw = a.construct_raw();
+        let raw = a.collect_params_flat();
         assert_eq!(raw.iter().sum::<f32>(), 0_f32);
-        let raw = b.construct_raw();
+        let raw = b.collect_params_flat();
         assert_eq!(raw, vec![0.5f32; raw.len()]);
     }
 }

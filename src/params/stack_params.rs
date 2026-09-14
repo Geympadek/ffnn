@@ -4,6 +4,7 @@ use std::slice::{Chunks, ChunksMut, Iter, IterMut};
 
 use crate::ffnn::activation::ActivationType;
 
+///Trait that represents a Layer inside of FFNN
 pub trait Layer {
     fn new() -> Self;
 
@@ -198,6 +199,7 @@ impl<const INPUT_LEN: usize> Layer for OutputLayer<INPUT_LEN> {
     }
 }
 
+///
 #[derive(Clone, Copy, Default)]
 pub struct ParamsStack<Layers> {
     pub layers: Layers
@@ -212,57 +214,57 @@ impl<Layers: Layer> ParamsStack<Layers> {
 }
 
 impl<Layers: Layer> Params for ParamsStack<Layers> {
-    type BiasesIter<'a> = Layers::BiasesIter<'a> where Self: 'a;
-    type BiasesIterMut<'a> = Layers::BiasesIterMut<'a> where Self: 'a;
+    type BiasLayers<'a> = Layers::BiasesIter<'a> where Self: 'a;
+    type BiasLayersMut<'a> = Layers::BiasesIterMut<'a> where Self: 'a;
 
-    type WeightsIter<'a> = Layers::WeightsIter<'a> where Self: 'a;
-    type WeightsIterMut<'a> = Layers::WeightsIterMut<'a> where Self: 'a;
+    type WeightLayers<'a> = Layers::WeightsIter<'a> where Self: 'a;
+    type WeightLayersMut<'a> = Layers::WeightsIterMut<'a> where Self: 'a;
 
-    type WeightsRowIter<'a> = Chunks<'a, f32> where Self: 'a;
-    type WeightsRowIterMut<'a> = ChunksMut<'a, f32> where Self: 'a;
+    type WeightNeurons<'a> = Chunks<'a, f32> where Self: 'a;
+    type WeightNeuronsMut<'a> = ChunksMut<'a, f32> where Self: 'a;
     
-    type BiasesBuff<'a> = Layers::BiasesBuff<'a> where Self: 'a;
-    type BiasesBuffMut<'a> = Layers::BiasesBuffMut<'a> where Self: 'a;
+    type BiasesFlat<'a> = Layers::BiasesBuff<'a> where Self: 'a;
+    type BiasesFlatMut<'a> = Layers::BiasesBuffMut<'a> where Self: 'a;
 
-    type WeightsBuff<'a> = Layers::WeightsBuff<'a> where Self: 'a;
-    type WeightsBuffMut<'a> = Layers::WeightsBuffMut<'a> where Self: 'a;
+    type WeightsFlat<'a> = Layers::WeightsBuff<'a> where Self: 'a;
+    type WeightsFlatMut<'a> = Layers::WeightsBuffMut<'a> where Self: 'a;
 
-    type RawParamIter<'a> = Chain<Self::BiasesBuff<'a>, Self::WeightsBuff<'a>> where Self: 'a;
-    type RawParamIterMut<'a> = Chain<Self::BiasesBuffMut<'a>, Self::WeightsBuffMut<'a>> where Self: 'a;
+    type ParamsIter<'a> = Chain<Self::BiasesFlat<'a>, Self::WeightsFlat<'a>> where Self: 'a;
+    type ParamsIterMut<'a> = Chain<Self::BiasesFlatMut<'a>, Self::WeightsFlatMut<'a>> where Self: 'a;
 
-    type TopologyIter<'a> = Layers::TopologyIter<'a> where Self: 'a;
+    type LayerSizes<'a> = Layers::TopologyIter<'a> where Self: 'a;
 
-    fn biases_iter(&self) -> Self::BiasesIter<'_> {
+    fn bias_layers(&self) -> Self::BiasLayers<'_> {
         self.layers.biases_iter()
     }
-    fn biases_iter_mut(&mut self) -> Self::BiasesIterMut<'_> {
+    fn bias_layers_mut(&mut self) -> Self::BiasLayersMut<'_> {
         self.layers.biases_iter_mut()
     }
-    fn weights_iter(&self) -> Self::WeightsIter<'_> {
+    fn weight_layers(&self) -> Self::WeightLayers<'_> {
         self.layers.weights_iter()
     }
-    fn weights_iter_mut(&mut self) -> Self::WeightsIterMut<'_> {
+    fn weight_layers_mut(&mut self) -> Self::WeightLayersMut<'_> {
         self.layers.weights_iter_mut()
     }
 
-    fn biases_buff(&self) -> Self::BiasesBuff<'_> {
+    fn biases_flat(&self) -> Self::BiasesFlat<'_> {
         self.layers.biases_buff()
     }
-    fn biases_buff_mut(&mut self) -> Self::BiasesBuffMut<'_> {
+    fn biases_flat_mut(&mut self) -> Self::BiasesFlatMut<'_> {
         self.layers.biases_buff_mut()
     }
 
-    fn weights_buff(&self) -> Self::WeightsBuff<'_> {
+    fn weights_flat(&self) -> Self::WeightsFlat<'_> {
         self.layers.weights_buff()
     }
-    fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_> {
+    fn weights_flat_mut(&mut self) -> Self::WeightsFlatMut<'_> {
         self.layers.weights_buff_mut()
     }
 
-    fn iter(&self) -> Self::RawParamIter<'_> {
-        self.biases_buff().chain(self.weights_buff())
+    fn params(&self) -> Self::ParamsIter<'_> {
+        self.biases_flat().chain(self.weights_flat())
     }
-    fn iter_mut(&mut self) -> Self::RawParamIterMut<'_> {
+    fn params_mut(&mut self) -> Self::ParamsIterMut<'_> {
         unsafe {
             let layers_ptr: *mut Layers = &mut self.layers;
 
@@ -273,11 +275,11 @@ impl<Layers: Layer> Params for ParamsStack<Layers> {
         }
     }
 
-    fn topology(&self) -> Self::TopologyIter<'_> {
+    fn layer_sizes(&self) -> Self::LayerSizes<'_> {
         self.layers.topology()
     }
 
-    fn create_from(params: &impl Params) -> Self {
+    fn from_params(params: &impl Params) -> Self {
         let mut result = Self::new();
         result.copy_from(params);
         result

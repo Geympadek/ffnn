@@ -1,8 +1,20 @@
 use crate::params::Params;
 
-use std::slice::{Iter, IterMut};
-use std::slice::{Chunks, ChunksMut};
+use std::slice::{Iter, IterMut, Chunks, ChunksMut};
 
+/// A [`Params`] implementation backed by a single contiguous `Vec<f32>`.
+///
+/// Memory layout:
+///
+/// ```text
+/// [ biases ......... | weights ................................. ]
+/// ```
+///
+/// Biases are stored layer-by-layer, with one `f32` per bias in each non-input
+/// layer. Weights are stored layer-by-layer, and within a layer
+/// neuron-by-neuron, with each neuron's incoming weights contiguous. This
+/// keeps every parameter in one allocation and makes the flat iterators
+/// trivial.
 #[derive(Clone)]
 pub struct ParamsHeap {
     topology: Vec<usize>,
@@ -12,23 +24,30 @@ pub struct ParamsHeap {
 }
 
 impl ParamsHeap {
+    /// Creates a new `ParamsHeap` for a network with the given layer sizes.
+    ///
+    /// `topology` lists the number of neurons in each layer, starting with
+    /// the input layer, and must contain at least two entries. All
+    /// parameters are initialized to `0.0`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `topology.len() <= 1`.
     pub fn new(topology: Vec<usize>) -> Self {
-        assert!(topology.len() > 1, "Wrong topology for FFNN was used, number of layers is less or equal to 1");
-        let neuron_count: usize = topology.iter().sum();
-        let bias_count = neuron_count - topology[0];
-
-        let mut weight_count: usize = 0;
-
-        let mut top_iter = topology.iter();
-        let mut prev_layer = *top_iter.next().unwrap();
-        for layer in top_iter {
-            let layer = *layer;
-            weight_count += layer * prev_layer;
-            prev_layer = layer;
-        }
+        assert!(
+            topology.len() > 1,
+            "topology must contain at least two layers, got {}",
+            topology.len(),
+        );
         
-        let parameter_count = weight_count + bias_count;
-        let buffer: Vec<f32> = vec![0.0_f32; parameter_count];
+        let bias_count = topology[1..].iter().sum();
+
+        let weight_count: usize = topology
+            .windows(2)
+            .map(|pair| pair[0] * pair[1])
+            .sum();
+        
+        let buffer = vec![0.0; bias_count + weight_count];
         Self {
             topology,
             buffer,
@@ -36,99 +55,121 @@ impl ParamsHeap {
             weight_count,
         }
     }
-    fn biases_buff(&self) -> &[f32] {
+
+    /// Returns the bias region as a contiguous slice.
+    fn bias_slice(&self) -> &[f32] {
         &self.buffer[0..self.bias_count]
     }
-    fn weights_buff(&self) -> &[f32] {
-        &self.buffer[self.bias_count..self.weight_count + self.bias_count]
-    }
-    fn biases_buff_mut(&mut self) -> &mut [f32] {
+    /// Returns the bias region as a mutable contiguous slice.
+    fn bias_slice_mut(&mut self) -> &mut [f32] {
         &mut self.buffer[0..self.bias_count]
     }
-    fn weights_buff_mut(&mut self) -> &mut [f32] {
+    /// Returns the weight region as a contiguous slice.
+    fn weight_slice(&self) -> &[f32] {
+        &self.buffer[self.bias_count..self.weight_count + self.bias_count]
+    }
+    /// Returns the weight region as a mutable contiguous slice.
+    fn weight_slice_mut(&mut self) -> &mut [f32] {
         &mut self.buffer[self.bias_count..self.weight_count + self.bias_count]
     }
 }
 
 impl Params for ParamsHeap {
-    type BiasesIter<'a> = BiasIter<'a, 'a>;
-    type BiasesIterMut<'a> = BiasIterMut<'a, 'a>;
+    type BiasLayers<'a> = BiasIter<'a, 'a>;
+    type BiasLayersMut<'a> = BiasIterMut<'a, 'a>;
 
-    type WeightsRowIter<'a> = Chunks<'a, f32>;
-    type WeightsIter<'a> = WeightsIter<'a, 'a>;
+    type WeightNeurons<'a> = Chunks<'a, f32>;
+    type WeightLayers<'a> = WeightsIter<'a, 'a>;
 
-    type WeightsRowIterMut<'a> = ChunksMut<'a, f32>;
-    type WeightsIterMut<'a> = WeightsIterMut<'a, 'a>;
+    type WeightNeuronsMut<'a> = ChunksMut<'a, f32>;
+    type WeightLayersMut<'a> = WeightsIterMut<'a, 'a>;
 
-    type BiasesBuff<'a> = Iter<'a, f32>;
-    type BiasesBuffMut<'a> = IterMut<'a, f32>;
+    type BiasesFlat<'a> = Iter<'a, f32>;
+    type BiasesFlatMut<'a> = IterMut<'a, f32>;
 
-    type WeightsBuff<'a> = Iter<'a, f32>;
-    type WeightsBuffMut<'a> = IterMut<'a, f32>;
+    type WeightsFlat<'a> = Iter<'a, f32>;
+    type WeightsFlatMut<'a> = IterMut<'a, f32>;
 
-    type RawParamIter<'a> = Iter<'a, f32>;
-    type RawParamIterMut<'a> = IterMut<'a, f32>;
+    type ParamsIter<'a> = Iter<'a, f32>;
+    type ParamsIterMut<'a> = IterMut<'a, f32>;
 
-    type TopologyIter<'a> = Iter<'a, usize>;
+    type LayerSizes<'a> = Iter<'a, usize>;
 
-    fn biases_iter(&self) -> Self::BiasesIter<'_> {
-        BiasIter::new(self.biases_buff(), &self.topology)
+    fn bias_layers(&self) -> Self::BiasLayers<'_> {
+        BiasIter::new(self.bias_slice(), &self.topology)
     }
-    fn biases_iter_mut(&mut self) -> Self::BiasesIterMut<'_> {
+
+    fn bias_layers_mut(&mut self) -> Self::BiasLayersMut<'_> {
         let bias_count = self.bias_count;
-        let bias_buffer = &mut self.buffer[0..bias_count];
-        BiasIterMut::new(bias_buffer, &self.topology)
-    }
-    fn weights_iter(&self) -> Self::WeightsIter<'_> {
-        WeightsIter::new(self.weights_buff(), &self.topology)
+        let biases = &mut self.buffer[..bias_count];
+        BiasIterMut::new(biases, &self.topology)
     }
 
-    fn weights_iter_mut(&mut self) -> Self::WeightsIterMut<'_> {
-        let weights_buff = &mut self.buffer[self.bias_count..self.weight_count + self.bias_count];
-        WeightsIterMut::new(weights_buff, &self.topology)
+    fn weight_layers(&self) -> Self::WeightLayers<'_> {
+        WeightsIter::new(self.weight_slice(), &self.topology)
     }
 
-    fn biases_buff(&self) -> Self::BiasesBuff<'_> {
-        self.biases_buff().iter()
-    }
-    fn biases_buff_mut(&mut self) -> Self::BiasesBuffMut<'_> {
-        self.biases_buff_mut().iter_mut()
-    }
-
-    fn weights_buff(&self) -> Self::WeightsBuff<'_> {
-        self.weights_buff().iter()
-    }
-    fn weights_buff_mut(&mut self) -> Self::WeightsBuffMut<'_> {
-        self.weights_buff_mut().iter_mut()
+    fn weight_layers_mut(&mut self) -> Self::WeightLayersMut<'_> {
+        let bias_count = self.bias_count;
+        let weights = &mut self.buffer[bias_count..];
+        WeightsIterMut::new(weights, &self.topology)
     }
 
-    fn iter(&self) -> Self::RawParamIter<'_> {
+    fn biases_flat(&self) -> Self::BiasesFlat<'_> {
+        self.bias_slice().iter()
+    }
+    fn biases_flat_mut(&mut self) -> Self::BiasesFlatMut<'_> {
+        self.bias_slice_mut().iter_mut()
+    }
+
+    fn weights_flat(&self) -> Self::WeightsFlat<'_> {
+        self.weight_slice().iter()
+    }
+    fn weights_flat_mut(&mut self) -> Self::WeightsFlatMut<'_> {
+        self.weight_slice_mut().iter_mut()
+    }
+
+    fn params(&self) -> Self::ParamsIter<'_> {
         self.buffer.iter()
     }
-    fn iter_mut(&mut self) -> Self::RawParamIterMut<'_> {
+    fn params_mut(&mut self) -> Self::ParamsIterMut<'_> {
         self.buffer.iter_mut()
     }
 
-    fn topology(&self) -> Self::TopologyIter<'_> {
+    fn layer_sizes(&self) -> Self::LayerSizes<'_> {
         self.topology.iter()
     }
 
-    fn create_from(src: &impl Params) -> Self {
-        let topology: Vec<usize> = src.topology().copied().collect();
+    fn from_params(src: &impl Params) -> Self {
+        let topology: Vec<usize> = src.layer_sizes().copied().collect();
         let mut result = Self::new(topology);
         result.copy_from(src);
         result
     }
 }
 
+/// Iterator over bias layers of a [`ParamsHeap`].
+///
+/// Yields one slice per non-input layer. The input layer is skipped; this is
+/// why the constructor takes the full topology and discards its first entry.
+#[derive(Clone)]
 pub struct BiasIter<'buf, 'top> {
     buffer: &'buf [f32],
     topology: &'top [usize],
 }
 
 impl<'buf, 'top> BiasIter<'buf, 'top> {
+    /// Creates a new iterator over `bias_buffer`, driven by `topology`.
+    ///
+    /// The first entry of `topology` (the input layer) is skipped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `topology` is empty.
     fn new(bias_buffer: &'buf [f32], topology: &'top [usize]) -> Self {
-        let (_, rest) = topology.split_first().expect("Wrong topology was provided");
+        let (_, rest) = topology
+            .split_first()
+            .expect("topology must contain at least one layer");
         Self {
             buffer: bias_buffer,
             topology: rest
@@ -140,13 +181,9 @@ impl<'buf, 'top> Iterator for BiasIter<'buf, 'top> {
     type Item = &'buf [f32];
 
     fn next(&mut self) -> Option<Self::Item> {
-        let topology = self.topology;
-        let (&neurons_in_layer, rest_topology) = topology.split_first()?;
+        let (&neurons_in_layer, rest_topology) = self.topology.split_first()?;
 
-        debug_assert!(neurons_in_layer <= self.buffer.len(), "Buffer size is incompatible with given topology");
-
-        let buffer = self.buffer;
-        let (curr_data, rest_buffer) = buffer.split_at(neurons_in_layer);
+        let (curr_data, rest_buffer) = self.buffer.split_at(neurons_in_layer);
 
         self.buffer = rest_buffer;
         self.topology = rest_topology;
@@ -155,15 +192,24 @@ impl<'buf, 'top> Iterator for BiasIter<'buf, 'top> {
     }
 }
 
-
+/// Mutable counterpart of [`BiasIter`].
 pub struct BiasIterMut<'buf, 'top> {
     buffer: &'buf mut [f32],
     topology: &'top [usize],
 }
 
 impl<'buf, 'top> BiasIterMut<'buf, 'top> {
+    /// Creates a new mutable iterator over `bias_buffer`, driven by `topology`.
+    ///
+    /// The first entry of `topology` (the input layer) is skipped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `topology` is empty.
     fn new(bias_buffer: &'buf mut [f32], topology: &'top [usize]) -> Self {
-        let (_, rest) = topology.split_first().expect("Wrong topology was provided");
+        let (_, rest) = topology
+            .split_first()
+            .expect("topology must contain at least one layer");
         Self {
             buffer: bias_buffer,
             topology: rest
