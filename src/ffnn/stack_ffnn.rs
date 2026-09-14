@@ -1,5 +1,5 @@
 use crate::{ffnn::{FFNN}, params::{self, Params}};
-use params::stack_params::{self, Layer, ParamsStack};
+use params::stack_params::{Layer, ParamsStack};
 use crate::ffnn::activation;
 
 ///Stack implementation of Feed forwarding neural network. 
@@ -20,20 +20,6 @@ impl<Layers: Layer + Default> FFNNStack<Layers> {
             params: ParamsStack::create_from(params),
             activation: activation,
         }
-    }
-
-    ///Creates a new instance of FFNN with activation function set to `activation`
-    pub fn with_activation(activation: activation::ActivationVal) -> Self {
-        let mut result = Self::default();
-        result.activation = activation;
-        result
-    }
-
-    ///Creates a new instance of FFNN while copying parameters from `params`
-    pub fn from_params(params: &impl Params) -> Self {
-        let mut result= Self::default();
-        result.params = stack_params::ParamsStack::create_from(params);
-        result
     }
 
     ///Feeds forward through FFNN and sends its outputs to `outputs` slice. Doesn't allocate any heap memory.
