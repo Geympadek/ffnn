@@ -32,7 +32,7 @@ impl FFNNHeap {
     /// * `output` - output slice, expected to be the same size as the last layer of FFNN
     /// * `buffer` - buffer slice used for temporary storage of layer output data
     /// # Panics
-    /// Function panics if neither `activation` set to anything.
+    /// Function panics if `activation` is not set to anything.
     /// Or if the lens of slices are smaller than expected.
     pub fn forward_with_buff(&self, input: &[f32], output: &mut [f32], buffer: &mut [f32]) {
         match self.activation {
