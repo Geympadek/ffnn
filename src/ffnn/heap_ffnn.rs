@@ -178,8 +178,6 @@ mod tests {
             .topology(&[2, 2, 1])
             .build().expect("Unable to build ffnn");
 
-        let test = FFNNHeap::new(foo.params, foo.activation);
-
         for (weight, val) in foo.params_mut().weights_buff_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
             *weight = val as f32;
         }
