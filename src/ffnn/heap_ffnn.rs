@@ -1,21 +1,27 @@
 use crate::{ffnn::{FFNN, activation::{self, ActivationVal}}, params::{Params, ParamsHeap}};
 use std::{marker::PhantomData};
 
-///Heap implementation that stores all the parameters in a contigous data structure
+/// Heap implementation that stores all the parameters in a contigous data structure
+/// 
 /// # Examples
 /// ```
-/// let ffnn = FFNNHeap<activation::ReLU>::new(ParamsHeap::new(vec![2, 2, 1]));
-/// let output = ffnn.forward_alloc(&[0, 1]);
+/// use crate::ffnn::ffnn::{self, activation, ParamsHeap, FFNNHeap, FFNN};
+/// 
+/// let ffnn = FFNNHeap::new(ParamsHeap::new(vec![2, 2, 1]), activation::ActivationVal::ReLU);
+/// let output = ffnn.forward_alloc(&[0_f32, 1_f32]);
 /// println!("{:?}", output);
 /// ```
 #[derive(Clone)]
 pub struct FFNNHeap<Activation: activation::ActivationType = activation::Unset> {
+    ///Parameters of the neural network stored on the heap
     params: ParamsHeap,
+    ///Activation function
     activation: ActivationVal,
     phantom: PhantomData<Activation>
 }
 
 impl<A: activation::ActivationType> FFNNHeap<A> {
+    ///Takes ownership of `params` and sets an activation function
     pub fn new(params: ParamsHeap, activation: ActivationVal) -> Self {
         Self {
             phantom: PhantomData,
@@ -23,6 +29,14 @@ impl<A: activation::ActivationType> FFNNHeap<A> {
             activation
         }
     }
+    ///Feeds forward through neural network without allocating any heap memory.
+    /// It uses `buffer` for storing layer outputs temporarely.
+    /// * `input` - input slice, expected to be the same size as the first layer of FFNN
+    /// * `output` - output slice, expected to be the same size as the last layer of FFNN
+    /// * `buffer` - buffer slice used for temporary storage of layer output data
+    /// # Panics
+    /// Function panics if neither `activation` nor `A` set to anything.
+    /// Or if the lens of slices are smaller than expected.
     pub fn forward_with_buff(&self, input: &[f32], output: &mut [f32], buffer: &mut [f32]) {
         match self.activation {
             ActivationVal::Unset => self.forward_with_act::<A>(input, output, buffer),
@@ -35,7 +49,6 @@ impl<A: activation::ActivationType> FFNNHeap<A> {
         assert!(buffer_len * 2<= buffer.len(), "Buffer size is too small");
 
         let (in_buff, out_buff) = buffer.split_at_mut(buffer_len/2 + 1);
-        debug_assert_eq!(in_buff.len(),out_buff.len());
 
         in_buff.copy_from_slice(input);
 
@@ -165,6 +178,7 @@ mod tests {
             .topology(&[2, 2, 1])
             .build().expect("Unable to build ffnn");
 
+        let test = FFNNHeap::new(foo.params, foo.activation);
 
         for (weight, val) in foo.params_mut().weights_buff_mut().zip([1, 1, 0, 0, 1, 0].iter().copied()) {
             *weight = val as f32;

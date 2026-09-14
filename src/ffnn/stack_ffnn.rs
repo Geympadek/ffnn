@@ -3,6 +3,11 @@ use params::stack_params::{self, Layer, ParamsStack};
 use crate::ffnn::activation;
 use std::marker::PhantomData;
 
+///Stack implementation of Feed forwarding neural network. 
+/// Doesn't allocate any heap memory unless prompted. 
+/// Embeddes Layer structure inside of its type.
+/// It is recommended to be used with macro `stack_ffnn!()`. 
+/// Don't use this type directly, unless you know what you are doing.
 #[derive(Clone, Copy)]
 pub struct FFNNStack<Layers: Layer + Default, Activation: activation::ActivationType = activation::Unset> {
     params: ParamsStack<Layers>,
@@ -11,6 +16,7 @@ pub struct FFNNStack<Layers: Layer + Default, Activation: activation::Activation
 }
 
 impl<Layers: Layer + Default, Activation: activation::ActivationType> FFNNStack<Layers, Activation> {
+    ///Creates a new instance of FFNN, while copying parameters from given refenence and setting activation function.
     pub fn new(params: &impl Params, activation: activation::ActivationVal) -> Self {
         Self {
             params: ParamsStack::create_from(params),
@@ -19,18 +25,23 @@ impl<Layers: Layer + Default, Activation: activation::ActivationType> FFNNStack<
         }
     }
 
+    ///Creates a new instance of FFNN with activation function set to `activation`
     pub fn with_activation(activation: activation::ActivationVal) -> Self {
         let mut result = Self::default();
         result.activation = activation;
         result
     }
 
+    ///Creates a new instance of FFNN while copying parameters from `params`
     pub fn from_params(params: &impl Params) -> Self {
         let mut result= Self::default();
         result.params = stack_params::ParamsStack::create_from(params);
         result
     }
 
+    ///Feeds forward through FFNN and sends its outputs to `outputs` slice. Doesn't allocate any heap memory.
+    /// # Panics
+    /// May panic if `inputs` len and `outputs` len doesn't match FFNN layer structure.
     pub fn forward(&self, inputs: &[f32], outputs: &mut [f32]) {
         let layers = &self.params.layers;
         match self.activation {
@@ -68,6 +79,10 @@ impl<L: Layer + Default, A: activation::ActivationType> FFNN<A> for FFNNStack<L,
     }
 }
 
+/// Shorthand for getting FFNNStack<> type.
+/// # Examples
+/// ```
+/// ```
 #[macro_export]
 macro_rules! stack_ffnn {
     ([$($dims:literal), +$(,)?], $activation:ty) => {
